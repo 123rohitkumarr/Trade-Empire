@@ -19,7 +19,7 @@ export default function VerifyOTP() {
     setLoading(true);
     setError('');
     try {
-      await axios.post('http://localhost:5000/api/auth/verify-otp', { email, otp });
+      await axios.post(' https://trade-empire-sgji.onrender.com/api/auth/verify-otp', { email, otp });
       setSuccess(true);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {

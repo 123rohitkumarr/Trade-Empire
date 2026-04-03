@@ -15,7 +15,7 @@ export default function Analytics() {
   useEffect(() => {
     const getTrades = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/trades', {
+        const res = await axios.get(' https://trade-empire-sgji.onrender.com/api/trades', {
           headers: { Authorization: token }
         });
         setTrades(res.data);

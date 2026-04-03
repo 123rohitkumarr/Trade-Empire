@@ -11,7 +11,7 @@ export default function Login() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', form);
+      const res = await axios.post(' https://trade-empire-sgji.onrender.com/api/auth/login', form);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('name', res.data.name);
       navigate('/dashboard');

@@ -24,7 +24,7 @@ export default function AIInsights() {
     setError('');
     setInsight('');
     try {
-      const res = await axios.get('http://localhost:5000/api/ai/insights', {
+      const res = await axios.get(' https://trade-empire-sgji.onrender.com/api/ai/insights', {
         headers: { Authorization: token },
         params: customPrompt ? { prompt: customPrompt } : {}
       });
