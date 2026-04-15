@@ -230,7 +230,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div className="footer">© 2026 TradeEmpire 👑 · Built by Rohit Dhakad, Jaipur ✨</div>
+      <div className="footer">© 2026 TradeEmpire👑 || Built by Rohit Dhakad </div>
 
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
