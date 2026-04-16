@@ -17,6 +17,7 @@ export default function Trades() {
   const [loaded, setLoaded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
+  const [formKey, setFormKey] = useState(0);
   const [activeTab, setActiveTab] = useState('journal');
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -115,6 +116,7 @@ export default function Trades() {
         target: form.target ? Number(form.target) : null,
       }, { headers: { Authorization: token } });
       setForm({ symbol: '', buyPrice: '', sellPrice: '', quantity: '', type: 'LONG', stopLoss: '', target: '', setup: 'Breakout', bias: 'Bullish', preTradePsychology: 'Calm', duringTradePsychology: 'Calm', exitReason: 'Manual Exit', notes: '', mistakes: '', lessonLearned: '' });
+      setFormKey(prev => prev + 1);
       await fetchTrades();
     } catch (err) { setError(err.response?.data?.message || 'Error adding trade'); }
     finally { setAdding(false); }
@@ -333,8 +335,8 @@ export default function Trades() {
             </div>
 
             {/* TRADES LIST */}
-            <div className="card">
-              <h3 className="card-title">📋 All Trades</h3>
+           <div className="card" key={formKey}>
+  <h3 className="card-title">📋 All Trades</h3>
 
               {/* Mobile Cards */}
               <div className="mobile-trades">
