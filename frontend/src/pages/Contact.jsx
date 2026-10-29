@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 export default function Contact() {
   const navigate = useNavigate();
@@ -10,7 +11,8 @@ export default function Contact() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => setLoaded(true), 100);
+    const timer = setTimeout(() => setLoaded(true), 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleSubmit = async () => {
@@ -21,19 +23,12 @@ export default function Contact() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(' https://trade-empire-sgji.onrender.com/api/contact/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const res = await api.post('/contact/send', form);
+      if (res.status === 200) {
         setSent(true);
-      } else {
-        setError(data.message || 'Something went wrong!');
       }
     } catch (err) {
-      setError('Server error! Please try again.');
+      setError(err.response?.data?.message || 'Server error! Please try again.');
     }
     setLoading(false);
   };

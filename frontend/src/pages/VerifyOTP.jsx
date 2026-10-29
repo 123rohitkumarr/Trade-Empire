@@ -1,31 +1,67 @@
-import { useState } from 'react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
+import api from '../services/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function VerifyOTP() {
-  const [otp, setOtp] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const email = location.state?.email;
+  const [email, setEmail] = useState(location.state?.email || '');
+  const [otp, setOtp] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [countdown, setCountdown] = useState(60);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    let timer;
+    if (countdown > 0) {
+      timer = setInterval(() => setCountdown(prev => prev - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [countdown]);
 
   const handleVerify = async () => {
+    if (!email) {
+      setError('Email is required.');
+      return;
+    }
     if (!otp || otp.length !== 6) {
       setError('Please enter a valid 6-digit OTP!');
       return;
     }
     setLoading(true);
     setError('');
+    setInfo('');
     try {
-      await axios.post(' https://trade-empire-sgji.onrender.com/api/auth/verify-otp', { email, otp });
+      await api.post('/auth/verify-otp', { email: email.trim(), otp: otp.trim() });
       setSuccess(true);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP!');
+      setError(err.response?.data?.message || 'Invalid or expired OTP!');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (countdown > 0 || resending) return;
+    if (!email) {
+      setError('Please provide your email address first.');
+      return;
+    }
+    setResending(true);
+    setError('');
+    setInfo('');
+    try {
+      const res = await api.post('/auth/resend-otp', { email: email.trim() });
+      setInfo(res.data?.message || 'New OTP sent to your email!');
+      setCountdown(60);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resend OTP.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -54,12 +90,32 @@ export default function VerifyOTP() {
               <h2 className="heading">
                 <span className="text">Verify Your Email</span>
               </h2>
-              <p className="subtitle">OTP sent to</p>
-              <p className="email-text">{email}</p>
+              <p className="subtitle">Verification code sent to</p>
+              {location.state?.email ? (
+                <p className="email-text">{email}</p>
+              ) : (
+                <input
+                  className="email-inp"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(99,102,241,0.3)',
+                    background: 'rgba(15,23,42,0.8)',
+                    color: '#fff',
+                    marginTop: 8,
+                    marginBottom: 12
+                  }}
+                />
+              )}
               <p className="subtitle" style={{ marginTop: 6 }}>Check your inbox & spam folder ✅</p>
             </div>
 
             {error && <p className="error">⚠️ {error}</p>}
+            {info && <p className="info-msg" style={{ color: '#22c55e', fontSize: 13, marginTop: 8, textAlign: 'center' }}>✅ {info}</p>}
 
             <div className="field">
               <label className="label">Enter 6-digit OTP</label>
@@ -76,8 +132,24 @@ export default function VerifyOTP() {
               {loading ? '⏳ Verifying...' : 'Verify OTP ✅'}
             </button>
 
-            <div className="timer-box">
-              <p className="timer-text">⏰ OTP expires in 10 minutes</p>
+            <div className="resend-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
+              <span className="timer-text" style={{ fontSize: 12, color: '#94a3b8' }}>⏰ Code expires in 10 mins</span>
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={countdown > 0 || resending}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: countdown > 0 ? '#64748b' : '#22d3ee',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: countdown > 0 ? 'not-allowed' : 'pointer',
+                  padding: 4
+                }}
+              >
+                {resending ? 'Sending...' : countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+              </button>
             </div>
 
             <p className="link" onClick={() => navigate('/register')}>
@@ -87,7 +159,7 @@ export default function VerifyOTP() {
         )}
       </div>
 
-      <div className="footer">© 2026 TradeEmpire 👑 · Built by Rohit Dhakad</div>
+      <div className="footer">© 2026 TradeEmpire 👑 · Built with excellence</div>
 
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -121,176 +193,127 @@ export default function VerifyOTP() {
         }
 
         .glow {
-          position: fixed;
+          position: absolute;
           border-radius: 50%;
-          filter: blur(100px);
-          opacity: 0.12;
-          z-index: 0;
+          filter: blur(120px);
+          pointer-events: none;
         }
-
-        .g1 { width: 400px; height: 400px; background: #6366f1; top: -100px; left: -100px; }
-        .g2 { width: 300px; height: 300px; background: #22d3ee; bottom: -50px; right: -50px; }
+        .g1 { width: 400px; height: 400px; background: rgba(99,102,241,0.15); top: -100px; left: -100px; }
+        .g2 { width: 350px; height: 350px; background: rgba(168,85,247,0.12); bottom: -100px; right: -100px; }
 
         .logo {
-          position: fixed;
-          top: 20px;
-          left: 24px;
-          z-index: 10;
+          position: absolute;
+          top: 28px; left: 36px;
+          font-size: 20px;
+          font-weight: 700;
+          color: #fff;
+          cursor: pointer;
           display: flex;
           align-items: center;
           gap: 8px;
-          cursor: pointer;
-          font-size: 16px;
+          z-index: 10;
         }
-
-        .logo-text { font-weight: 800; color: white; font-size: 16px; }
-
-        .card {
-          position: relative;
-          z-index: 2;
-          width: 100%;
-          max-width: 420px;
-          padding: 40px 32px;
-          border-radius: 20px;
-          background: rgba(15,23,42,0.85);
-          backdrop-filter: blur(20px);
-          border: 1px solid rgba(255,255,255,0.08);
-          box-shadow: 0 0 60px rgba(99,102,241,0.15);
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-          animation: fadeIn 0.7s ease;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        .heading {
-          font-size: 24px;
-          font-weight: 700;
-          color: white;
-          margin-bottom: 6px;
-        }
-
-        .text {
-          background: linear-gradient(90deg, #6366f1, #22d3ee);
+        .logo-text {
+          background: linear-gradient(135deg, #fff, #94a3b8);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
         }
 
-        .subtitle { color: #64748b; font-size: 13px; }
-
-        .email-text {
-          color: #22d3ee;
-          font-weight: 700;
-          font-size: 14px;
-          margin-top: 4px;
-          word-break: break-all;
+        .card {
+          width: 100%;
+          max-width: 440px;
+          background: rgba(15,23,42,0.85);
+          border: 1px solid rgba(99,102,241,0.2);
+          border-radius: 24px;
+          padding: 40px;
+          backdrop-filter: blur(20px);
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+          position: relative;
+          z-index: 1;
         }
 
-        .field { display: flex; flex-direction: column; gap: 8px; }
+        .heading { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+        .text {
+          background: linear-gradient(135deg, #fff, #cbd5e1);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #64748b; font-size: 14px; }
+        .email-text { color: #22d3ee; font-weight: 600; font-size: 15px; margin-top: 4px; }
 
-        .label { font-size: 13px; color: #94a3b8; font-weight: 500; }
+        .error {
+          background: rgba(239,68,68,0.1);
+          border: 1px solid rgba(239,68,68,0.3);
+          color: #f87171;
+          padding: 10px 14px;
+          border-radius: 10px;
+          font-size: 13px;
+          margin-top: 16px;
+          text-align: center;
+        }
+
+        .field { margin-top: 24px; }
+        .label { display: block; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
 
         .otp-inp {
-          padding: 16px;
-          border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.04);
-          color: white;
-          font-size: 28px;
-          letter-spacing: 16px;
-          text-align: center;
-          font-family: 'Poppins', sans-serif;
-          outline: none;
-          transition: 0.3s;
           width: 100%;
+          padding: 16px;
+          background: rgba(30,41,59,0.8);
+          border: 2px solid rgba(99,102,241,0.3);
+          border-radius: 14px;
+          color: #22d3ee;
+          font-size: 28px;
+          font-weight: 700;
+          letter-spacing: 12px;
+          text-align: center;
+          outline: none;
+          transition: all 0.2s;
         }
-
         .otp-inp:focus {
           border-color: #6366f1;
           box-shadow: 0 0 20px rgba(99,102,241,0.25);
-          background: rgba(99,102,241,0.06);
         }
 
         .btn {
+          width: 100%;
           padding: 14px;
-          border-radius: 12px;
+          margin-top: 20px;
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
           border: none;
-          background: linear-gradient(135deg, #6366f1, #22d3ee);
-          color: white;
-          cursor: pointer;
-          font-weight: 700;
+          border-radius: 12px;
+          color: #fff;
           font-size: 15px;
-          font-family: 'Poppins', sans-serif;
-          transition: 0.3s;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 15px rgba(99,102,241,0.3);
         }
-
-        .btn:hover { transform: scale(1.02); box-shadow: 0 0 25px rgba(99,102,241,0.4); }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-        .timer-box {
-          background: rgba(34,211,238,0.05);
-          border: 1px solid rgba(34,211,238,0.15);
-          border-radius: 10px;
-          padding: 10px;
-          text-align: center;
+        .btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(99,102,241,0.4);
         }
-
-        .timer-text { color: #22d3ee; font-size: 13px; }
+        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
         .link {
           text-align: center;
+          margin-top: 20px;
           color: #64748b;
+          font-size: 13px;
           cursor: pointer;
-          font-size: 13px;
+          transition: color 0.2s;
         }
+        .link:hover { color: #94a3b8; }
 
-        .error {
-          color: #f87171;
-          font-size: 13px;
-          padding: 10px 14px;
-          background: rgba(239,68,68,0.1);
-          border: 1px solid rgba(239,68,68,0.2);
-          border-radius: 8px;
-          text-align: center;
-        }
-
-        .success-box {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 12px;
-          padding: 20px 0;
-          text-align: center;
-        }
-
-        .success-title {
-          font-size: 24px;
-          font-weight: 800;
-          color: #22c55e;
-        }
-
+        .success-box { text-align: center; padding: 20px 0; }
+        .success-title { font-size: 24px; font-weight: 700; color: #22c55e; margin: 16px 0 8px; }
         .success-sub { color: #64748b; font-size: 14px; }
 
         .footer {
-          position: fixed;
-          bottom: 12px;
-          left: 50%;
-          transform: translateX(-50%);
-          color: rgba(255,255,255,0.25);
-          font-size: 11px;
+          position: absolute;
+          bottom: 20px;
+          color: #334155;
+          font-size: 12px;
           z-index: 10;
-          white-space: nowrap;
-        }
-
-        @media (max-width: 480px) {
-          .card { padding: 28px 20px; }
-          .heading { font-size: 20px; }
-          .otp-inp { font-size: 22px; letter-spacing: 10px; }
-          .logo-text { font-size: 14px; }
         }
       `}</style>
     </div>

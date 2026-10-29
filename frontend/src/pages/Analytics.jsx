@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -10,22 +10,23 @@ export default function Analytics() {
   const [trades, setTrades] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const navigate = useNavigate();
-  const token = `Bearer ${localStorage.getItem('token')}`;
 
   useEffect(() => {
+    let mounted = true;
     const getTrades = async () => {
       try {
-        const res = await axios.get(' https://trade-empire-sgji.onrender.com/api/trades', {
-          headers: { Authorization: token }
-        });
-        setTrades(res.data);
+        const res = await api.get('/trades');
+        if (mounted) {
+          setTrades(Array.isArray(res.data) ? res.data : []);
+        }
       } catch (err) {
-        console.log(err);
+        console.error('Failed to load trades:', err);
       } finally {
-        setLoaded(true);
+        if (mounted) setLoaded(true);
       }
     };
     getTrades();
+    return () => { mounted = false; };
   }, []);
 
   const totalPnl = trades.reduce((sum, t) => sum + t.pnl, 0);

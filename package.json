@@ -1,0 +1,14 @@
+{
+  "name": "trade-empire",
+  "version": "1.0.0",
+  "description": "Trade Empire full-stack application",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:backend": "npm --prefix backend test",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "build:frontend": "npm --prefix frontend run build"
+  }
+}
+

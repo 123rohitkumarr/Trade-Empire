@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const SETUPS = ['Breakout', 'Momentum', 'Reversal', 'Support/Resistance', 'Trend Following', 'Other'];
@@ -28,17 +28,21 @@ export default function Trades() {
     exitReason: 'Manual Exit', notes: '', mistakes: '', lessonLearned: ''
   });
   const navigate = useNavigate();
-  const token = `Bearer ${localStorage.getItem('token')}`;
 
   const fetchTrades = async () => {
     try {
-      const res = await axios.get(' https://trade-empire-sgji.onrender.com/api/trades', { headers: { Authorization: token } });
-      setTrades(res.data);
-    } catch (err) { console.log(err); }
-    finally { setLoaded(true); }
+      const res = await api.get('/trades');
+      setTrades(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to load trades:', err);
+    } finally {
+      setLoaded(true);
+    }
   };
 
-  useEffect(() => { fetchTrades(); }, []);
+  useEffect(() => {
+    fetchTrades();
+  }, []);
 
   // ✅ FIX: TradingView widget loaded only once, only when simulator tab is active
   useEffect(() => {
@@ -105,16 +109,20 @@ export default function Trades() {
 
   const handleSubmit = async () => {
     if (!form.symbol) { setError('Symbol is required!'); return; }
+    if (!form.buyPrice || !form.sellPrice || !form.quantity) {
+      setError('Entry price, exit price, and quantity are required!');
+      return;
+    }
     setAdding(true); setError('');
     try {
-      await axios.post(' https://trade-empire-sgji.onrender.com/api/trades', {
+      await api.post('/trades', {
         ...form,
         buyPrice: Number(form.buyPrice),
         sellPrice: Number(form.sellPrice),
         quantity: Number(form.quantity),
         stopLoss: form.stopLoss ? Number(form.stopLoss) : null,
         target: form.target ? Number(form.target) : null,
-      }, { headers: { Authorization: token } });
+      });
       setForm({ symbol: '', buyPrice: '', sellPrice: '', quantity: '', type: 'LONG', stopLoss: '', target: '', setup: 'Breakout', bias: 'Bullish', preTradePsychology: 'Calm', duringTradePsychology: 'Calm', exitReason: 'Manual Exit', notes: '', mistakes: '', lessonLearned: '' });
       setFormKey(prev => prev + 1);
       await fetchTrades();
@@ -123,9 +131,13 @@ export default function Trades() {
   };
 
   const handleDelete = async (id) => {
-    await axios.delete(` https://trade-empire-sgji.onrender.com/api/trades/${id}`, { headers: { Authorization: token } });
-    await fetchTrades();
-    setSelectedTrade(null);
+    try {
+      await api.delete(`/trades/${id}`);
+      await fetchTrades();
+      setSelectedTrade(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete trade');
+    }
   };
 
   const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);

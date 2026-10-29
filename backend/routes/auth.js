@@ -1,61 +1,22 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const User = require('../models/User');
+const { sendOTPEmail } = require('../services/emailService');
+const { createRateLimiter } = require('../middleware/security');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 5000,
-  socketTimeout: 10000
-});
-
-transporter.verify((error) => {
-  if (error) {
-    console.error('SMTP Connection Failed:', error.message);
-  } else {
-    console.log('SMTP Server is ready');
-  }
+// Stricter rate limiter for authentication endpoints to prevent brute force
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: 'Too many authentication attempts. Please try again after 15 minutes.'
 });
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const sendOTPEmail = (email, name, otp) => {
-  transporter.sendMail({
-    from: `TradeEmpire <${process.env.EMAIL_FROM}>`,
-    to: email,
-    subject: '👑 TradeEmpire — Verify Your Email',
-    html: `
-      <div style="font-family: sans-serif; max-width: 500px; margin: auto; background: #0f172a; padding: 40px; border-radius: 20px; color: #fff;">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #22d3ee; font-size: 28px; margin: 0;">📈 TradeEmpire 👑</h1>
-          <p style="color: #64748b; margin-top: 8px;">India's #1 Trading Platform</p>
-        </div>
-        <h2 style="color: #fff; font-size: 22px; margin-bottom: 12px;">Welcome, ${name}! 🎉</h2>
-        <p style="color: #94a3b8; line-height: 1.7; margin-bottom: 24px;">Thanks for joining TradeEmpire! Use the OTP below to verify your email and start your trading journey.</p>
-        <div style="background: linear-gradient(135deg, #22d3ee20, #818cf820); border: 1px solid #22d3ee40; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 24px;">
-          <p style="color: #94a3b8; font-size: 13px; margin-bottom: 8px;">Your OTP Code</p>
-          <h1 style="color: #22d3ee; font-size: 48px; letter-spacing: 12px; margin: 0;">${otp}</h1>
-          <p style="color: #64748b; font-size: 12px; margin-top: 12px;">⏰ Valid for 10 minutes only</p>
-        </div>
-        <p style="color: #475569; font-size: 13px; text-align: center;">If you didn't register on TradeEmpire, ignore this email.</p>
-        <hr style="border: 1px solid #1e293b; margin: 24px 0;">
-        <p style="color: #334155; font-size: 12px; text-align: center;">© 2026 TradeEmpire 👑 · Built by Rohit Dhakad, Jaipur</p>
-      </div>
-    `
-  }).catch(err => {
-    console.error('OTP Email Failed:', err.message);
-  });
-};
-
-router.post('/register', async (req, res) => {
+// POST /api/auth/register
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -63,28 +24,56 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'All fields are required!' });
     }
 
-    const existingUser = await User.findOne({ email });
+    const cleanName = String(name).trim();
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    if (cleanName.length < 2) {
+      return res.status(400).json({ message: 'Name must be at least 2 characters long!' });
+    }
+
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ message: 'Please provide a valid email address!' });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long!' });
+    }
+
+    const existingUser = await User.findOne({ email: cleanEmail });
     if (existingUser && existingUser.isVerified) {
-      return res.status(400).json({ message: 'Email already exists!' });
+      return res.status(400).json({ message: 'An account with this email already exists!' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     if (existingUser && !existingUser.isVerified) {
-      existingUser.name = name;
+      existingUser.name = cleanName;
       existingUser.password = hashedPassword;
       existingUser.otp = otp;
       existingUser.otpExpiry = otpExpiry;
+      existingUser.otpAttempts = 0;
+      existingUser.lastOtpSentAt = new Date();
       await existingUser.save();
     } else {
-      await User.create({ name, email, password: hashedPassword, otp, otpExpiry });
+      await User.create({
+        name: cleanName,
+        email: cleanEmail,
+        password: hashedPassword,
+        otp,
+        otpExpiry,
+        otpAttempts: 0,
+        lastOtpSentAt: new Date()
+      });
     }
 
-    res.json({ message: 'OTP sent to your email!', email });
+    res.json({ message: 'Verification OTP sent to your email!', email: cleanEmail });
 
-    sendOTPEmail(email, name, otp);
+    // Non-blocking email dispatch
+    sendOTPEmail(cleanEmail, cleanName, otp).catch((err) => {
+      console.error('Failed to send OTP email:', err.message);
+    });
 
   } catch (err) {
     console.error('Register Error:', err.message);
@@ -92,7 +81,8 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/verify-otp', async (req, res) => {
+// POST /api/auth/verify-otp
+router.post('/verify-otp', authLimiter, async (req, res) => {
   try {
     const { email, otp } = req.body;
 
@@ -100,25 +90,48 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ message: 'Email and OTP are required!' });
     }
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'User not found!' });
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found!' });
+    }
 
     if (user.isVerified) {
-      return res.status(400).json({ message: 'Email already verified!' });
+      return res.status(400).json({ message: 'Email is already verified! Please log in.' });
     }
 
-    if (user.otp !== otp) return res.status(400).json({ message: 'Invalid OTP!' });
-
-    if (new Date() > user.otpExpiry) {
-      return res.status(400).json({ message: 'OTP expired! Please register again.' });
+    // Check expiration first
+    if (!user.otpExpiry || new Date() > user.otpExpiry) {
+      return res.status(400).json({ message: 'OTP has expired! Please request a new one.' });
     }
 
+    // Check max attempts
+    if (user.otpAttempts >= 5) {
+      return res.status(429).json({ message: 'Too many incorrect attempts. Please request a new OTP.' });
+    }
+
+    // Verify OTP match
+    if (user.otp !== cleanOtp) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
+      await user.save();
+      const remaining = 5 - user.otpAttempts;
+      return res.status(400).json({
+        message: remaining > 0
+          ? `Invalid OTP! ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Too many incorrect attempts. Please request a new OTP.'
+      });
+    }
+
+    // Successful verification
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpiry = undefined;
+    user.otpAttempts = 0;
     await user.save();
 
-    res.json({ message: 'Email verified successfully!' });
+    res.json({ message: 'Email verified successfully! You can now log in.' });
 
   } catch (err) {
     console.error('Verify OTP Error:', err.message);
@@ -126,7 +139,54 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+// POST /api/auth/resend-otp
+router.post('/resend-otp', authLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required!' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found!' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: 'Email is already verified! Please log in.' });
+    }
+
+    // Cooldown check (60 seconds)
+    const cooldownMs = 60 * 1000;
+    if (user.lastOtpSentAt && (Date.now() - new Date(user.lastOtpSentAt).getTime() < cooldownMs)) {
+      const waitSeconds = Math.ceil((cooldownMs - (Date.now() - new Date(user.lastOtpSentAt).getTime())) / 1000);
+      return res.status(429).json({ message: `Please wait ${waitSeconds}s before requesting another OTP.` });
+    }
+
+    const newOtp = generateOTP();
+    user.otp = newOtp;
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    user.otpAttempts = 0;
+    user.lastOtpSentAt = new Date();
+    await user.save();
+
+    res.json({ message: 'A new OTP has been sent to your email!' });
+
+    sendOTPEmail(cleanEmail, user.name, newOtp).catch((err) => {
+      console.error('Failed to resend OTP email:', err.message);
+    });
+
+  } catch (err) {
+    console.error('Resend OTP Error:', err.message);
+    res.status(500).json({ message: 'Failed to resend OTP. Please try again.' });
+  }
+});
+
+// POST /api/auth/login
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -134,23 +194,38 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required!' });
     }
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Email not found!' });
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid email or password!' });
+    }
 
     if (!user.isVerified) {
-      return res.status(400).json({ message: 'Please verify your email first!' });
+      return res.status(403).json({
+        message: 'Please verify your email before logging in!',
+        unverified: true,
+        email: user.email
+      });
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) return res.status(400).json({ message: 'Wrong password!' });
+    if (!validPassword) {
+      return res.status(400).json({ message: 'Invalid email or password!' });
+    }
 
+    const secret = process.env.JWT_SECRET || 'fallback_development_secret_do_not_use_in_prod';
     const token = jwt.sign(
-      { _id: user._id },
-      process.env.JWT_SECRET,
+      { _id: user._id, email: user.email },
+      secret,
       { expiresIn: '7d' }
     );
 
-    res.json({ token, name: user.name });
+    res.json({
+      token,
+      name: user.name,
+      email: user.email
+    });
 
   } catch (err) {
     console.error('Login Error:', err.message);

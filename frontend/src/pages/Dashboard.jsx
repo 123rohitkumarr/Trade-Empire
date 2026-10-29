@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import api from '../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -15,11 +16,9 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchTrades = async () => {
       try {
-        const res = await fetch(' https://trade-empire-sgji.onrender.com/api/trades', {
-          headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
-        });
-        const data = await res.json();
-        setTrades(Array.isArray(data) ? data : []);
+        const res = await api.get('/trades');
+        setTrades(Array.isArray(res.data) ? res.data : []);
+
       } catch {
         setTrades([]);
       } finally {

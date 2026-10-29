@@ -1,86 +1,54 @@
 const router = require('express').Router();
-const nodemailer = require('nodemailer');
+const { sendContactEmail } = require('../services/emailService');
+const { createRateLimiter } = require('../middleware/security');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 5000,
-  socketTimeout: 10000
-});
-
-transporter.verify((error) => {
-  if (error) {
-    console.error('SMTP Connection Failed:', error.message);
-  } else {
-    console.log('SMTP Server is ready');
-  }
+// Rate limiter for contact submissions to prevent spam attacks
+const contactLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: 'Too many contact messages sent. Please wait 15 minutes before sending another inquiry.'
 });
 
 const sanitize = (str) =>
-  String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+  String(str || '')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .trim();
 
-router.post('/send', async (req, res) => {
+router.post('/send', contactLimiter, async (req, res) => {
   try {
     const { name, email, subject, message } = req.body;
 
     if (!name || !email || !message) {
-      return res.status(400).json({ message: 'All fields are required!' });
+      return res.status(400).json({ message: 'Name, email, and message are required fields!' });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: 'Invalid email address!' });
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ message: 'Please enter a valid email address!' });
     }
 
-    const safeName    = sanitize(name);
-    const safeEmail   = sanitize(email);
-    const safeSubject = sanitize(subject || 'No subject');
-    const safeMessage = sanitize(message);
+    const safeName = sanitize(name).slice(0, 100);
+    const safeSubject = sanitize(subject || 'General Inquiry').slice(0, 150);
+    const safeMessage = sanitize(message).slice(0, 3000);
 
-    const emailPromise = transporter.sendMail({
-      from: `TradeEmpire <${process.env.EMAIL_FROM}>`,
-      to: process.env.EMAIL_FROM,
-      replyTo: safeEmail,
-      subject: `TradeEmpire Contact: ${safeSubject} — from ${safeName}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: auto; background: #f8fafc; padding: 32px; border-radius: 16px;">
-          <h2 style="color: #0891b2; margin-bottom: 8px;">📈 TradeEmpire — New Contact Message</h2>
-          <hr style="border: 1px solid #e2e8f0; margin-bottom: 24px;">
-          <p><strong>Name:</strong> ${safeName}</p>
-          <p><strong>Email:</strong> ${safeEmail}</p>
-          <p><strong>Subject:</strong> ${safeSubject}</p>
-          <p><strong>Message:</strong></p>
-          <div style="background: #fff; padding: 16px; border-radius: 10px; border-left: 4px solid #0891b2; margin-top: 8px;">
-            <p style="margin: 0; line-height: 1.7;">${safeMessage}</p>
-          </div>
-          <hr style="border: 1px solid #e2e8f0; margin-top: 24px;">
-          <p style="color: #94a3b8; font-size: 12px;">Sent from TradeEmpire Contact Form</p>
-        </div>
-      `
+    if (safeMessage.length < 5) {
+      return res.status(400).json({ message: 'Message must be at least 5 characters long.' });
+    }
+
+    await sendContactEmail({
+      name: safeName,
+      email: cleanEmail,
+      subject: safeSubject,
+      message: safeMessage
     });
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Email timeout')), 15000)
-    );
-
-    await Promise.race([emailPromise, timeoutPromise]);
-
-    res.json({ message: 'Message sent successfully! We will get back to you soon.' });
+    res.json({ message: 'Thank you! Your message has been sent successfully. We will get back to you soon.' });
 
   } catch (err) {
     console.error('Contact Email Error:', err.message);
-
-    if (err.message.includes('timeout')) {
-      return res.status(504).json({ message: 'Email server timed out. Please try again.' });
-    }
-
-    res.status(500).json({ message: 'Failed to send message. Please try again later.' });
+    res.status(500).json({ message: 'Failed to send message. Please try again later or reach out directly via email.' });
   }
 });
 

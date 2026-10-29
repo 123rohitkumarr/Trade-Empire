@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function Register() {
@@ -16,7 +16,7 @@ export default function Register() {
     setLoading(true);
     setError('');
     try {
-      await axios.post(' https://trade-empire-sgji.onrender.com/api/auth/register', form);
+      await api.post('/auth/register', form);
       navigate('/verify-otp', { state: { email: form.email } });
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed!');

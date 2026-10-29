@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const tips = [
@@ -17,20 +17,18 @@ export default function AIInsights() {
   const [activeTip, setActiveTip] = useState(null);
   const [loaded] = useState(true);
   const navigate = useNavigate();
-  const token = `Bearer ${localStorage.getItem('token')}`;
 
   const getInsights = async (customPrompt = null) => {
     setLoading(true);
     setError('');
     setInsight('');
     try {
-      const res = await axios.get(' https://trade-empire-sgji.onrender.com/api/ai/insights', {
-        headers: { Authorization: token },
+      const res = await api.get('/ai/insights', {
         params: customPrompt ? { prompt: customPrompt } : {}
       });
       setInsight(res.data.insight);
     } catch (err) {
-      setError('Something went wrong! Check your API key.');
+      setError(err.response?.data?.message || 'Something went wrong while fetching AI insights.');
     }
     setLoading(false);
   };

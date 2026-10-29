@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const features = [
@@ -13,22 +13,12 @@ const features = [
 export default function Home() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
-  const statsRef = useRef(null);
-  const [statsVisible, setStatsVisible] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) setStatsVisible(true);
-    }, { threshold: 0.3 });
-    if (statsRef.current) observer.observe(statsRef.current);
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {

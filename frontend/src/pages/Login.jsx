@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
@@ -11,11 +11,15 @@ export default function Login() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(' https://trade-empire-sgji.onrender.com/api/auth/login', form);
+      const res = await api.post('/auth/login', form);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('name', res.data.name);
       navigate('/dashboard');
     } catch (err) {
+      if (err.response?.data?.unverified) {
+        navigate('/verify-otp', { state: { email: err.response.data.email || form.email.trim() } });
+        return;
+      }
       setError(err.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);
