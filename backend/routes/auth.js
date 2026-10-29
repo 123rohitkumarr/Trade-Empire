@@ -18,7 +18,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // POST /api/auth/register
 router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'All fields are required!' });
@@ -84,7 +84,7 @@ router.post('/register', authLimiter, async (req, res) => {
 // POST /api/auth/verify-otp
 router.post('/verify-otp', authLimiter, async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp } = req.body || {};
 
     if (!email || !otp) {
       return res.status(400).json({ message: 'Email and OTP are required!' });
@@ -142,7 +142,7 @@ router.post('/verify-otp', authLimiter, async (req, res) => {
 // POST /api/auth/resend-otp
 router.post('/resend-otp', authLimiter, async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email } = req.body || {};
 
     if (!email) {
       return res.status(400).json({ message: 'Email is required!' });
@@ -188,7 +188,7 @@ router.post('/resend-otp', authLimiter, async (req, res) => {
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required!' });

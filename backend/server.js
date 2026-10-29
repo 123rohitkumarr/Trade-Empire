@@ -61,14 +61,21 @@ if (process.env.MONGO_URI && process.env.NODE_ENV !== 'test') {
   console.warn('⚠️ MONGO_URI is not set in environment variables. Database features will fail until configured.');
 }
 
-// Routes
+// Routes (Supported with both /api/* prefix and root /* for deployment flexibility)
 app.use('/api/auth', authRoutes);
-app.use('/api/trades', tradeRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/contact', contactRoutes);
+app.use('/auth', authRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+app.use('/api/trades', tradeRoutes);
+app.use('/trades', tradeRoutes);
+
+app.use('/api/ai', aiRoutes);
+app.use('/ai', aiRoutes);
+
+app.use('/api/contact', contactRoutes);
+app.use('/contact', contactRoutes);
+
+// Health check endpoint (accessible at both /health and /api/health)
+const handleHealthCheck = (req, res) => {
   const dbState = mongoose.connection.readyState;
   const dbStatusMap = {
     0: 'disconnected',
@@ -83,7 +90,10 @@ app.get('/health', (req, res) => {
     uptime: Math.floor(process.uptime()),
     database: dbStatusMap[dbState] || 'unknown'
   });
-});
+};
+
+app.get('/health', handleHealthCheck);
+app.get('/api/health', handleHealthCheck);
 
 app.get('/', (req, res) => {
   res.json({

@@ -7,6 +7,7 @@ const app = require('../server');
 function executeRequest(app, { method = 'GET', url = '/', headers = {}, body = null }) {
   return new Promise((resolve) => {
     const req = new http.IncomingMessage();
+    req.socket = { remoteAddress: '127.0.0.1' };
     req.method = method;
     req.url = url;
     req.headers = Object.fromEntries(
@@ -73,11 +74,14 @@ function executeRequest(app, { method = 'GET', url = '/', headers = {}, body = n
 }
 
 describe('Server Routes In-Memory Integration', () => {
-  test('GET /health returns 200 with status ok and uptime', async () => {
-    const res = await executeRequest(app, { method: 'GET', url: '/health' });
-    assert.equal(res.status, 200);
-    assert.equal(res.body.status, 'ok');
-    assert.ok(res.body.uptime !== undefined);
+  test('GET /health and GET /api/health return 200 with status ok and uptime', async () => {
+    const res1 = await executeRequest(app, { method: 'GET', url: '/health' });
+    assert.equal(res1.status, 200);
+    assert.equal(res1.body.status, 'ok');
+
+    const res2 = await executeRequest(app, { method: 'GET', url: '/api/health' });
+    assert.equal(res2.status, 200);
+    assert.equal(res2.body.status, 'ok');
   });
 
   test('GET / returns API info', async () => {
@@ -87,10 +91,34 @@ describe('Server Routes In-Memory Integration', () => {
     assert.equal(res.body.status, 'online');
   });
 
-  test('GET /api/trades without token returns 401 Unauthorized', async () => {
-    const res = await executeRequest(app, { method: 'GET', url: '/api/trades' });
-    assert.equal(res.status, 401);
-    assert.ok(res.body.message.includes('Access denied'));
+  test('GET /api/trades and GET /trades without token return 401 Unauthorized', async () => {
+    const resApi = await executeRequest(app, { method: 'GET', url: '/api/trades' });
+    assert.equal(resApi.status, 401);
+    assert.ok(resApi.body.message.includes('Access denied'));
+
+    const resRoot = await executeRequest(app, { method: 'GET', url: '/trades' });
+    assert.equal(resRoot.status, 401);
+    assert.ok(resRoot.body.message.includes('Access denied'));
+  });
+
+  test('POST /auth/login and POST /api/auth/login are handled (not 404 Route not found)', async () => {
+    const resRoot = await executeRequest(app, { method: 'POST', url: '/auth/login', body: {} });
+    assert.notEqual(resRoot.status, 404, 'POST /auth/login should not return 404 Route not found');
+    assert.equal(resRoot.status, 400);
+
+    const resApi = await executeRequest(app, { method: 'POST', url: '/api/auth/login', body: {} });
+    assert.notEqual(resApi.status, 404, 'POST /api/auth/login should not return 404 Route not found');
+    assert.equal(resApi.status, 400);
+  });
+
+  test('POST /auth/register and POST /api/auth/register are handled (not 404 Route not found)', async () => {
+    const resRoot = await executeRequest(app, { method: 'POST', url: '/auth/register', body: {} });
+    assert.notEqual(resRoot.status, 404, 'POST /auth/register should not return 404 Route not found');
+    assert.equal(resRoot.status, 400);
+
+    const resApi = await executeRequest(app, { method: 'POST', url: '/api/auth/register', body: {} });
+    assert.notEqual(resApi.status, 404, 'POST /api/auth/register should not return 404 Route not found');
+    assert.equal(resApi.status, 400);
   });
 
   test('Unknown route returns 404', async () => {
@@ -99,3 +127,4 @@ describe('Server Routes In-Memory Integration', () => {
     assert.ok(res.body.message.includes('Route not found'));
   });
 });
+

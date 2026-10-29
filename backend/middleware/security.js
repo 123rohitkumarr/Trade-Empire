@@ -39,7 +39,15 @@ const createRateLimiter = ({
       return next();
     }
 
-    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+    let ip = 'unknown';
+    try {
+      ip = (req.headers && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : null)
+        || req.ip
+        || req.socket?.remoteAddress
+        || 'unknown';
+    } catch {
+      ip = 'unknown';
+    }
     const now = Date.now();
     const entry = requests.get(ip);
 

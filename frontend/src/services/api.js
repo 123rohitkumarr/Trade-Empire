@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-// Get base URL from environment or default to localhost:5000 in dev
+// Get base URL from environment or default to localhost:5000/api in dev
 const envUrl = import.meta.env.VITE_API_URL;
-const defaultUrl = 'http://localhost:5000/api';
-const baseURL = (envUrl || defaultUrl).trim().replace(/\/+$/, '');
+const rawUrl = (envUrl || 'http://localhost:5000/api').trim().replace(/\/+$/, '');
+// Ensure /api is included in baseURL even if VITE_API_URL is configured without it (e.g. https://domain.com)
+const baseURL = rawUrl.endsWith('/api') ? rawUrl : `${rawUrl}/api`;
 
 const api = axios.create({
   baseURL,
